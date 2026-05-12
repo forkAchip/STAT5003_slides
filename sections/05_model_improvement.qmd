@@ -1,0 +1,60 @@
+## Feature Engineering & Selection {.smaller}
+
+:::: {.columns}
+
+::: {.column width="38%"}
+
+### Selected Features (22 from 170+)
+
+**By domain knowledge (18):**
+
+- **Demographics:** Age, EdLevel, WorkExp, YearsCode
+- **Employment:** Employment, RemoteWork, OrgSize, ICorPM
+- **Geography:** Country, Industry, DevType
+- **AI Attitudes:** AISelect, AISent, AIAcc, AIThreat
+- **Compensation:** ConvertedCompYearly
+- **Tools:** ToolCountWork, ToolCountPersonal
+
+**By statistical screening (4):**
+
+Screened all 153 unused columns using Cramér's V / Eta² association tests:
+
+- NewRole (V=0.24)
+- TechEndorseIntro (V=0.07)
+- PurchaseInfluence (V=0.07)
+- LeavingScore (η=0.33) — derived ordinal encoding of NewRole (0–4)
+
+:::
+
+::: {.column width="62%"}
+
+### Feature Engineering & Filtering
+
+All parameters learned from **training set only** (no data leakage)
+
+**Numeric** (WorkExp, YearsCode, Salary, ToolCounts, LeavingScore)
+
+- Missing → median imputation + binary indicator
+- Extremes → 99th percentile capping
+- Salary → log(1+x) transformation
+
+**Categorical** (Age, EdLevel, RemoteWork, OrgSize, ICorPM, Country, Industry, NewRole, TechEndorseIntro, PurchaseInfluence)
+
+- Rare categories → merged to "Other" (top-15 levels)
+- Missing → encoded as "Missing" level
+
+**Multi-response** (DevType, Employment, AISelect, AISent, AIAcc, AIThreat)
+
+- Semicolon-split → binary (0/1) column per option, top-15 retained
+
+**Automated feature selection** (3 sequential filters):
+
+1. Near-zero variance: remove if >95% identical values
+2. High correlation: drop one if r > 0.90
+3. High missing rate: remove if >80% missing
+
+**Result**: 170+ → 22 → ~120 encoded → filtered → **shared set for all 5 models**
+
+:::
+
+::::
