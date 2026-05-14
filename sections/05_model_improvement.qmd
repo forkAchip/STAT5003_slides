@@ -11,7 +11,7 @@
   <div style="display:flex;flex-direction:column;gap:5px;align-items:center;justify-content:flex-start;flex:1;">
 
     <div style="width:880px;padding:10px 22px;background:#f8fbff;border:1px solid #d6e4fb;border-radius:14px;box-sizing:border-box;">
-      <div style="font-size:19px;font-weight:760;color:#315f9f;margin-bottom:6px;">📋 Feature Selection — 22 features from 170+ columns</div>
+      <div style="font-size:19px;font-weight:760;color:#315f9f;margin-bottom:6px;">Feature Selection — 22 features from 170+ columns</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 28px;font-size:15px;line-height:1.35;color:#344054;">
         <div><strong style="color:#1f2a44;">Demographics:</strong> Age, EdLevel, WorkExp, YearsCode</div>
         <div><strong style="color:#1f2a44;">AI Attitudes:</strong> AISelect, AISent, AIAcc, AIThreat</div>
@@ -29,7 +29,7 @@
     <div style="font-size:19px;line-height:1;color:#315f9f;font-weight:800;">↓</div>
 
     <div style="width:880px;padding:10px 22px;background:#ffffff;border:1px solid #d7dee8;border-radius:14px;box-sizing:border-box;">
-      <div style="font-size:19px;font-weight:760;color:#315f9f;margin-bottom:6px;">⚙️ Feature Engineering — all parameters from training set only</div>
+      <div style="font-size:19px;font-weight:760;color:#315f9f;margin-bottom:6px;">Feature Engineering — all parameters from training set only</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 20px;font-size:15px;line-height:1.35;color:#344054;">
         <div><strong style="color:#1f2a44;">Numeric:</strong> median imputation, 99th percentile capping, log-transform salary</div>
         <div><strong style="color:#1f2a44;">Categorical:</strong> rare categories → "Other" (top-15), missing → "Missing"</div>
@@ -40,7 +40,7 @@
     <div style="font-size:19px;line-height:1;color:#315f9f;font-weight:800;">↓</div>
 
     <div style="width:880px;padding:10px 22px;background:#ffffff;border:1px solid #d7dee8;border-radius:14px;box-sizing:border-box;">
-      <div style="font-size:19px;font-weight:760;color:#315f9f;margin-bottom:6px;">🔍 Feature Filtering — 3 automated filters</div>
+      <div style="font-size:19px;font-weight:760;color:#315f9f;margin-bottom:6px;">Feature Filtering — 3 automated filters</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px 20px;font-size:15px;line-height:1.35;color:#344054;">
         <div><strong style="color:#1f2a44;">Near-zero variance:</strong> remove if &gt;95% identical</div>
         <div><strong style="color:#1f2a44;">High correlation:</strong> drop one if r &gt; 0.90</div>
