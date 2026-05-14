@@ -176,9 +176,9 @@
       <div style="font-size:38px;line-height:1;font-weight:760;color:#1f2a44;margin:14px 0 4px 0;">0.315</div>
       <div style="font-size:16px;color:#475467;margin-bottom:12px;">F1-score</div>
       <div style="background:#eef2f7;border-radius:999px;height:12px;overflow:hidden;">
-        <div style="width:27.3%;height:12px;background:#315f9f;border-radius:999px;"></div>
+        <div style="width:27.5%;height:12px;background:#315f9f;border-radius:999px;"></div>
       </div>
-      <div style="font-size:15.5px;color:#475467;margin-top:7px;">Recall: 27.3%</div>
+      <div style="font-size:15.5px;color:#475467;margin-top:7px;">Recall: 27.5%</div>
     </div>
 
     <div style="border-top:3px solid #315f9f;padding:15px 14px 14px 14px;background:#ffffff;box-sizing:border-box;min-height:228px;">
