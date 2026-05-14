@@ -8,6 +8,10 @@ dir.create("figures", showWarnings = FALSE)
 
 df <- read_csv("survey_results_public.csv", show_col_types = FALSE)
 
+# ------------------------------------------------------------
+# Helper functions
+# ------------------------------------------------------------
+
 convert_years <- function(x) {
   x <- as.character(x)
   x[x == "Less than 1 year"] <- "0.5"
@@ -15,9 +19,127 @@ convert_years <- function(x) {
   as.numeric(x)
 }
 
+count_multiresponse <- function(x) {
+  x <- as.character(x)
+  ifelse(is.na(x) | x == "", NA_real_, str_count(x, ";") + 1)
+}
+
+cap_numeric <- function(x, lower_prob = 0.01, upper_prob = 0.99) {
+  x <- as.numeric(x)
+  if (all(is.na(x))) return(rep(0, length(x)))
+
+  lower <- quantile(x, lower_prob, na.rm = TRUE)
+  upper <- quantile(x, upper_prob, na.rm = TRUE)
+
+  x <- ifelse(!is.na(x) & x < lower, lower, x)
+  x <- ifelse(!is.na(x) & x > upper, upper, x)
+
+  med <- median(x, na.rm = TRUE)
+  if (is.na(med)) med <- 0
+
+  x[is.na(x)] <- med
+  x
+}
+
+clean_factor <- function(x, top_n = 5) {
+  x <- as.character(x)
+  x[is.na(x) | x == ""] <- "Missing"
+
+  top_levels <- names(sort(table(x), decreasing = TRUE))[1:min(top_n, length(unique(x)))]
+  x[!(x %in% top_levels)] <- "Other"
+
+  factor(x)
+}
+
+# ------------------------------------------------------------
+# Make the code safer if some optional columns are missing
+# ------------------------------------------------------------
+
+needed_cols <- c(
+  "JobSat",
+  "ConvertedCompYearly",
+  "WorkExp",
+  "YearsCode",
+  "OrgSize",
+  "RemoteWork",
+  "AISelect",
+  "AISent",
+  "AIThreat",
+  "AIAcc",
+  "DevType",
+  "Age",
+  "EdLevel",
+  "ICorPM",
+  "NewRole",
+  "PurchaseInfluence"
+)
+
+for (col in needed_cols) {
+  if (!(col %in% names(df))) {
+    df[[col]] <- NA
+  }
+}
+
+if (!("ToolCountWork" %in% names(df))) {
+  work_tool_cols <- intersect(
+    c(
+      "LanguageHaveWorkedWith",
+      "DatabaseHaveWorkedWith",
+      "PlatformHaveWorkedWith",
+      "WebframeHaveWorkedWith",
+      "MiscTechHaveWorkedWith",
+      "ToolsTechHaveWorkedWith",
+      "NEWCollabToolsHaveWorkedWith"
+    ),
+    names(df)
+  )
+
+  if (length(work_tool_cols) > 0) {
+    df$ToolCountWork <- rowSums(
+      as.data.frame(lapply(work_tool_cols, function(v) {
+        replace_na(count_multiresponse(df[[v]]), 0)
+      })),
+      na.rm = TRUE
+    )
+  } else {
+    df$ToolCountWork <- NA_real_
+  }
+}
+
+if (!("ToolCountPersonal" %in% names(df))) {
+  personal_tool_cols <- intersect(
+    c(
+      "LanguageWantToWorkWith",
+      "DatabaseWantToWorkWith",
+      "PlatformWantToWorkWith",
+      "WebframeWantToWorkWith",
+      "MiscTechWantToWorkWith",
+      "ToolsTechWantToWorkWith",
+      "NEWCollabToolsWantToWorkWith"
+    ),
+    names(df)
+  )
+
+  if (length(personal_tool_cols) > 0) {
+    df$ToolCountPersonal <- rowSums(
+      as.data.frame(lapply(personal_tool_cols, function(v) {
+        replace_na(count_multiresponse(df[[v]]), 0)
+      })),
+      na.rm = TRUE
+    )
+  } else {
+    df$ToolCountPersonal <- NA_real_
+  }
+}
+
+# ------------------------------------------------------------
+# Main EDA data
+# ------------------------------------------------------------
+
 eda_df <- df %>%
   mutate(
     JobSat = as.numeric(JobSat),
+
     JobSat_5 = case_when(
       JobSat <= 1  ~ "Very Dissatisfied",
       JobSat <= 3  ~ "Dissatisfied",
@@ -26,12 +148,14 @@ eda_df <- df %>%
       JobSat <= 10 ~ "Very Satisfied",
       TRUE ~ NA_character_
     ),
+
     JobSat_3 = case_when(
       JobSat <= 3  ~ "Negative",
       JobSat <= 6  ~ "Neutral",
       JobSat <= 10 ~ "Positive",
       TRUE ~ NA_character_
     ),
+
     JobSat_5 = factor(
       JobSat_5,
       levels = c(
@@ -42,13 +166,17 @@ eda_df <- df %>%
         "Very Satisfied"
       )
     ),
+
     JobSat_3 = factor(
       JobSat_3,
       levels = c("Negative", "Neutral", "Positive")
     ),
+
     WorkExp = as.numeric(WorkExp),
     YearsCode = convert_years(YearsCode),
     ConvertedCompYearly = as.numeric(ConvertedCompYearly),
+    ToolCountWork = as.numeric(ToolCountWork),
+    ToolCountPersonal = as.numeric(ToolCountPersonal),
     LogSalary = log1p(ConvertedCompYearly)
   ) %>%
   filter(!is.na(JobSat_3), !is.na(JobSat_5))
@@ -342,7 +470,8 @@ p_corr <- ggplot(corr_long, aes(x = Var1, y = Var2, fill = Correlation)) +
     mid = "white",
     high = "#D73027",
     midpoint = 0,
-    limits = c(-1, 1)
+    limits = c(-1, 1),
+    na.value = "#f2f4f7"
   ) +
   labs(
     title = "Numeric features are related",
@@ -367,26 +496,6 @@ p_corr <- ggplot(corr_long, aes(x = Var1, y = Var2, fill = Correlation)) +
     panel.grid = element_blank(),
     plot.margin = margin(1, 6, 1, 4)
   )
-
-cap_numeric <- function(x, lower_prob = 0.01, upper_prob = 0.99) {
-  if (all(is.na(x))) return(rep(0, length(x)))
-  lower <- quantile(x, lower_prob, na.rm = TRUE)
-  upper <- quantile(x, upper_prob, na.rm = TRUE)
-  x <- ifelse(!is.na(x) & x < lower, lower, x)
-  x <- ifelse(!is.na(x) & x > upper, upper, x)
-  med <- median(x, na.rm = TRUE)
-  if (is.na(med)) med <- 0
-  x[is.na(x)] <- med
-  x
-}
-
-clean_factor <- function(x, top_n = 5) {
-  x <- as.character(x)
-  x[is.na(x) | x == ""] <- "Missing"
-  top_levels <- names(sort(table(x), decreasing = TRUE))[1:min(top_n, length(unique(x)))]
-  x[!(x %in% top_levels)] <- "Other"
-  factor(x)
-}
 
 pca_df <- eda_df %>%
   transmute(
@@ -420,6 +529,7 @@ for (v in categorical_vars) {
 }
 
 x_mat <- model.matrix(~ . - JobSat_3 - 1, data = pca_df)
+
 keep_cols <- apply(x_mat, 2, sd) > 0
 x_mat <- x_mat[, keep_cols, drop = FALSE]
 x_mat <- scale(x_mat)
@@ -526,51 +636,95 @@ ggsave(
 ## {.nostretch}
 
 ```{=html}
-<div style="width:100%;height:720px;box-sizing:border-box;padding:14px 42px 14px 42px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;overflow:hidden;">
-  <div style="border-bottom:1px solid #d7dee8;padding-bottom:5px;margin-bottom:5px;">
-    <h1 style="font-size:28px;line-height:1.05;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
+<div style="width:100%;height:720px;box-sizing:border-box;padding:14px 44px 14px 44px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;overflow:hidden;">
+
+  <div style="border-bottom:1px solid #d7dee8;padding-bottom:5px;margin-bottom:6px;">
+    <h1 style="font-size:27px;line-height:1.05;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
   </div>
 
-  <div style="margin-bottom:4px;">
-    <div style="font-size:18px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:1px;">Target structure and key patterns</div>
-    <div style="font-size:16.8px;line-height:1.12;font-weight:560;color:#344054;">The target is imbalanced, and simple predictors cannot clearly split satisfaction groups.</div>
+  <div style="margin-bottom:6px;">
+    <div style="font-size:17.5px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Target structure and key patterns</div>
+    <div style="font-size:15.4px;line-height:1.22;font-weight:520;color:#344054;">
+      We show job satisfaction in both five classes and three classes. The five-class version keeps more detail, while the three-class version is used for modelling because it is easier to understand and more stable.
+    </div>
   </div>
 
-  <div style="height:500px;display:flex;align-items:center;justify-content:center;margin:0 0 7px 0;overflow:hidden;">
+  <div style="height:360px;display:flex;align-items:center;justify-content:center;margin:0 0 8px 0;overflow:hidden;">
     <img src="figures/eda_slide_1.png" style="width:100%;height:100%;object-fit:contain;object-position:center center;display:block;" />
   </div>
 
-  <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:10px 16px;box-sizing:border-box;">
-    <div style="font-size:15.8px;line-height:1.22;color:#344054;font-weight:520;">
-      <span style="font-weight:760;color:#315f9f;">Meaning:</span>
-      Most developers are in the Positive group, while Negative and Neutral are much smaller. This means the target is clearly imbalanced. Salary and work experience show small differences between groups, but their ranges still overlap a lot. Therefore, the model needs to combine several features, and accuracy alone may hide weak prediction for the smaller groups.
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;height:184px;">
+
+    <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#315f9f;margin-bottom:5px;">Why show five classes?</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        The five-class target shows the original satisfaction structure in more detail. It separates very dissatisfied, dissatisfied, neutral, satisfied, and very satisfied developers, so we can see how the original score is distributed.
+      </div>
     </div>
+
+    <div style="background:#fffaf0;border:1px solid #f1d9a5;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#9a6515;margin-bottom:5px;">Why use three classes?</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        The five classes are too detailed for modelling. Some groups are small and close to each other, so we combine them into Negative, Neutral, and Positive. This makes the prediction task clearer.
+      </div>
+    </div>
+
+    <div style="background:#f9fafb;border:1px solid #d9dee8;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#475467;margin-bottom:5px;">What does this mean?</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        Most developers are in the Positive group. Negative and Neutral are much smaller, so the model may find these two groups harder to predict. This is why we should not only look at accuracy.
+      </div>
+    </div>
+
   </div>
+
 </div>
 ```
 
 ## {.nostretch}
 
 ```{=html}
-<div style="width:100%;height:720px;box-sizing:border-box;padding:14px 42px 14px 42px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;overflow:hidden;">
-  <div style="border-bottom:1px solid #d7dee8;padding-bottom:5px;margin-bottom:5px;">
-    <h1 style="font-size:28px;line-height:1.05;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
+<div style="width:100%;height:720px;box-sizing:border-box;padding:14px 44px 14px 44px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;overflow:hidden;">
+
+  <div style="border-bottom:1px solid #d7dee8;padding-bottom:5px;margin-bottom:6px;">
+    <h1 style="font-size:27px;line-height:1.05;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
   </div>
 
-  <div style="margin-bottom:4px;">
-    <div style="font-size:18px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:1px;">Feature relationships and class separability</div>
-    <div style="font-size:16.8px;line-height:1.12;font-weight:560;color:#344054;">Some features show patterns, but the classes still overlap in the feature space.</div>
+  <div style="margin-bottom:6px;">
+    <div style="font-size:17.5px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Feature relationships and class separability</div>
+    <div style="font-size:15.4px;line-height:1.22;font-weight:520;color:#344054;">
+      This slide checks whether the selected features can clearly separate Negative, Neutral, and Positive developers. The result shows some useful patterns, but the groups are still mixed together.
+    </div>
   </div>
 
-  <div style="height:500px;display:flex;align-items:center;justify-content:center;margin:0 0 7px 0;overflow:hidden;">
+  <div style="height:360px;display:flex;align-items:center;justify-content:center;margin:0 0 8px 0;overflow:hidden;">
     <img src="figures/eda_slide_2.png" style="width:100%;height:100%;object-fit:contain;object-position:center center;display:block;" />
   </div>
 
-  <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:10px 16px;box-sizing:border-box;">
-    <div style="font-size:15.8px;line-height:1.22;color:#344054;font-weight:520;">
-      <span style="font-weight:760;color:#315f9f;">Meaning:</span>
-      Remote work and numeric features provide some useful signal, but they do not create clear boundaries between satisfaction classes. The PCA plot also shows that Negative and Neutral cases are mixed with Positive cases. This makes the task harder than a simple classification problem, so Macro F1 is more suitable than accuracy because it pays more attention to the smaller classes.
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;height:184px;">
+
+    <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#315f9f;margin-bottom:5px;">Remote work</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        Remote work has some relationship with job satisfaction, but the difference is not very strong. It can help the model, but it cannot explain satisfaction by itself.
+      </div>
     </div>
+
+    <div style="background:#fffaf0;border:1px solid #f1d9a5;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#9a6515;margin-bottom:5px;">Numeric features</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        Some numeric features are related to each other, such as coding experience and work experience. This means the model may receive similar information from different columns.
+      </div>
+    </div>
+
+    <div style="background:#f9fafb;border:1px solid #d9dee8;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#475467;margin-bottom:5px;">Class overlap</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        The PCA plot shows that Negative, Neutral, and Positive cases are mixed together. This means the model cannot easily separate the three groups, especially the smaller groups.
+      </div>
+    </div>
+
   </div>
+
 </div>
 ```
