@@ -1,9 +1,9 @@
-## EDA 1: Target Structure and Key Patterns {.smaller}
-
-```{r eda-slide-1, echo=FALSE, message=FALSE, warning=FALSE, fig.width=13.8, fig.height=5.0, out.width="100%"}
+```{r eda-generate-figures, echo=FALSE, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(patchwork)
 library(scales)
+
+dir.create("figures", showWarnings = FALSE)
 
 df <- read_csv("survey_results_public.csv", show_col_types = FALSE)
 
@@ -47,7 +47,37 @@ eda_df <- df %>%
   filter(!is.na(JobSat_3), !is.na(JobSat_5))
 
 # ============================================================
-# Target distributions
+# Shared theme
+# ============================================================
+
+target_colours <- c(
+  "Very Dissatisfied" = "#D95F5F",
+  "Dissatisfied" = "#F28E8E",
+  "Neutral" = "#E9B45B",
+  "Satisfied" = "#9EC9F3",
+  "Very Satisfied" = "#5F9ED1",
+  "Negative" = "#EB6A6A",
+  "Positive" = "#8FBCEB"
+)
+
+base_theme <- theme_minimal(base_size = 10.5) +
+  theme(
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(
+      face = "bold",
+      size = 12.5,
+      color = "#1f2a44",
+      margin = margin(b = 3)
+    ),
+    axis.title = element_text(size = 9.5, color = "#344054"),
+    axis.text.x = element_text(size = 8.5, color = "#344054"),
+    axis.text.y = element_text(size = 8.5, color = "#344054"),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(2, 5, 2, 5)
+  )
+
+# ============================================================
+# Slide 1 figures
 # ============================================================
 
 target_5 <- eda_df %>%
@@ -64,23 +94,14 @@ target_3 <- eda_df %>%
     Class = as.character(JobSat_3)
   )
 
-target_colours <- c(
-  "Very Dissatisfied" = "#D95F5F",
-  "Dissatisfied" = "#F28E8E",
-  "Neutral" = "#E9B45B",
-  "Satisfied" = "#9EC9F3",
-  "Very Satisfied" = "#5F9ED1",
-  "Negative" = "#EB6A6A",
-  "Positive" = "#8FBCEB"
-)
-
 p_target_5 <- ggplot(target_5, aes(x = prop, y = fct_rev(JobSat_5), fill = Class)) +
   geom_col(width = 0.62, show.legend = FALSE) +
   geom_text(
     aes(label = paste0(n, "  (", percent(prop, accuracy = 0.1), ")")),
     hjust = -0.05,
-    size = 2.8,
-    fontface = "bold"
+    size = 3.1,
+    fontface = "bold",
+    color = "#1f2937"
   ) +
   scale_x_continuous(labels = percent, limits = c(0, 0.58)) +
   scale_fill_manual(values = target_colours) +
@@ -89,22 +110,16 @@ p_target_5 <- ggplot(target_5, aes(x = prop, y = fct_rev(JobSat_5), fill = Class
     x = "Share of valid JobSat responses",
     y = NULL
   ) +
-  theme_minimal(base_size = 9.5) +
-  theme(
-    plot.title = element_text(face = "bold", size = 11.5, margin = margin(b = 1)),
-    axis.title = element_text(size = 8.5),
-    axis.text.x = element_text(size = 7.5),
-    axis.text.y = element_text(size = 7.8),
-    plot.margin = margin(1, 3, 1, 3)
-  )
+  base_theme
 
 p_target_3 <- ggplot(target_3, aes(x = prop, y = fct_rev(JobSat_3), fill = Class)) +
   geom_col(width = 0.62, show.legend = FALSE) +
   geom_text(
     aes(label = paste0(n, "  (", percent(prop, accuracy = 0.1), ")")),
     hjust = -0.05,
-    size = 2.8,
-    fontface = "bold"
+    size = 3.1,
+    fontface = "bold",
+    color = "#1f2937"
   ) +
   scale_x_continuous(labels = percent, limits = c(0, 0.82)) +
   scale_fill_manual(values = target_colours) +
@@ -113,26 +128,21 @@ p_target_3 <- ggplot(target_3, aes(x = prop, y = fct_rev(JobSat_3), fill = Class
     x = "Share of valid JobSat responses",
     y = NULL
   ) +
-  theme_minimal(base_size = 9.5) +
-  theme(
-    plot.title = element_text(face = "bold", size = 11.5, margin = margin(b = 1)),
-    axis.title = element_text(size = 8.5),
-    axis.text.x = element_text(size = 7.5),
-    axis.text.y = element_text(size = 8),
-    plot.margin = margin(1, 3, 1, 3)
-  )
+  base_theme
 
 p_target <- (p_target_5 | p_target_3) +
   plot_annotation(
     title = "Target distribution comparison",
     theme = theme(
-      plot.title = element_text(face = "bold", size = 12.5, margin = margin(b = 2))
+      plot.title = element_text(
+        family = "Arial",
+        face = "bold",
+        size = 13.5,
+        color = "#1f2a44",
+        margin = margin(b = 3)
+      )
     )
   )
-
-# ============================================================
-# Missingness
-# ============================================================
 
 missing_vars <- c(
   "JobSat", "ConvertedCompYearly", "WorkExp", "YearsCode",
@@ -151,8 +161,9 @@ p_missing <- ggplot(missing_df, aes(x = MissingRate, y = reorder(Variable, Missi
   geom_text(
     aes(label = percent(MissingRate, accuracy = 0.1)),
     hjust = -0.05,
-    size = 2.8,
-    fontface = "bold"
+    size = 3.1,
+    fontface = "bold",
+    color = "#1f2937"
   ) +
   scale_x_continuous(labels = percent, limits = c(0, 0.58)) +
   labs(
@@ -160,18 +171,11 @@ p_missing <- ggplot(missing_df, aes(x = MissingRate, y = reorder(Variable, Missi
     x = "Missing rate",
     y = NULL
   ) +
-  theme_minimal(base_size = 9.5) +
+  base_theme +
   theme(
-    plot.title = element_text(face = "bold", size = 12.5, margin = margin(b = 1)),
-    axis.title = element_text(size = 8.5),
-    axis.text.x = element_text(size = 7.5),
-    axis.text.y = element_text(size = 8),
-    plot.margin = margin(1, 4, 1, 4)
+    plot.title = element_text(face = "bold", size = 13.5, color = "#1f2a44", margin = margin(b = 3)),
+    axis.text.y = element_text(size = 9, color = "#344054")
   )
-
-# ============================================================
-# Salary and work experience by target class
-# ============================================================
 
 plot_data <- eda_df %>%
   filter(!is.na(WorkExp), !is.na(LogSalary), is.finite(LogSalary)) %>%
@@ -188,12 +192,10 @@ p_salary <- ggplot(plot_data, aes(x = JobSat_3, y = LogSalary, fill = JobSat_3))
     x = NULL,
     y = "Log yearly compensation"
   ) +
-  theme_minimal(base_size = 9.5) +
+  base_theme +
   theme(
-    plot.title = element_text(face = "bold", size = 12, margin = margin(b = 1)),
-    axis.title = element_text(size = 8.5),
-    axis.text = element_text(size = 8),
-    plot.margin = margin(1, 4, 1, 4)
+    plot.title = element_text(face = "bold", size = 13, color = "#1f2a44", margin = margin(b = 3)),
+    axis.text = element_text(size = 9, color = "#344054")
   )
 
 p_work <- ggplot(plot_data, aes(x = JobSat_3, y = WorkExp, fill = JobSat_3)) +
@@ -204,38 +206,25 @@ p_work <- ggplot(plot_data, aes(x = JobSat_3, y = WorkExp, fill = JobSat_3)) +
     x = NULL,
     y = "Years of work experience"
   ) +
-  theme_minimal(base_size = 9.5) +
+  base_theme +
   theme(
-    plot.title = element_text(face = "bold", size = 12, margin = margin(b = 1)),
-    axis.title = element_text(size = 8.5),
-    axis.text = element_text(size = 8),
-    plot.margin = margin(1, 4, 1, 4)
+    plot.title = element_text(face = "bold", size = 13, color = "#1f2a44", margin = margin(b = 3)),
+    axis.text = element_text(size = 9, color = "#344054")
   )
 
-top_panel <- p_target | p_missing
-bottom_panel <- p_salary | p_work
+eda_slide_1_plot <- ((p_target | p_missing) / (p_salary | p_work)) +
+  plot_layout(heights = c(1.04, 1))
 
-(top_panel / bottom_panel) +
-  plot_layout(heights = c(1.02, 1)) +
-  plot_annotation(
-    subtitle = "We checked both five-class and three-class targets. Three-class is simpler and clearer.",
-    caption = "Meaning: the target is imbalanced. Salary and experience overlap across groups, so accuracy alone is not enough.",
-    theme = theme(
-      plot.subtitle = element_text(size = 11.5, color = "grey25", margin = margin(b = 8)),
-      plot.caption = element_text(size = 9.6, face = "bold", hjust = 0, margin = margin(t = 7))
-    )
-  )
-```
-
-## EDA 2: Feature Relationships and Class Separability {.smaller}
-
-```{r eda-slide-2, echo=FALSE, message=FALSE, warning=FALSE, fig.width=13.8, fig.height=5.0, out.width="100%"}
-library(tidyverse)
-library(patchwork)
-library(scales)
+ggsave(
+  filename = "figures/eda_slide_1.png",
+  plot = eda_slide_1_plot,
+  width = 13.6,
+  height = 5.25,
+  dpi = 260
+)
 
 # ============================================================
-# Remote work pattern
+# Slide 2 figures
 # ============================================================
 
 remote_df <- eda_df %>%
@@ -271,21 +260,19 @@ p_remote <- ggplot(remote_df, aes(x = JobSat_3, y = prop, fill = RemoteGroup)) +
     y = "Within-class proportion",
     fill = NULL
   ) +
-  theme_minimal(base_size = 9.2) +
+  theme_minimal(base_size = 10.2) +
   theme(
-    plot.title = element_text(face = "bold", size = 10.8, margin = margin(b = 1)),
-    axis.title = element_text(size = 8),
-    axis.text = element_text(size = 8),
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(face = "bold", size = 12.2, color = "#1f2a44", margin = margin(b = 3)),
+    axis.title = element_text(size = 9, color = "#344054"),
+    axis.text = element_text(size = 8.8, color = "#344054"),
     legend.position = "bottom",
-    legend.text = element_text(size = 6.4),
-    legend.key.size = unit(0.2, "cm"),
-    plot.margin = margin(1, 4, 1, 4)
+    legend.text = element_text(size = 7.4, color = "#344054"),
+    legend.key.size = unit(0.24, "cm"),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(2, 5, 2, 5)
   ) +
   guides(fill = guide_legend(nrow = 1, byrow = TRUE))
-
-# ============================================================
-# Correlation heatmap
-# ============================================================
 
 corr_df <- eda_df %>%
   transmute(
@@ -302,7 +289,7 @@ names(corr_long) <- c("Var1", "Var2", "Correlation")
 
 p_corr <- ggplot(corr_long, aes(x = Var1, y = Var2, fill = Correlation)) +
   geom_tile(color = "white") +
-  geom_text(aes(label = round(Correlation, 2)), size = 2.5) +
+  geom_text(aes(label = round(Correlation, 2)), size = 3.1, color = "#1f2937") +
   scale_fill_gradient2(
     low = "#4575B4",
     mid = "white",
@@ -316,20 +303,18 @@ p_corr <- ggplot(corr_long, aes(x = Var1, y = Var2, fill = Correlation)) +
     y = NULL,
     fill = "Corr."
   ) +
-  theme_minimal(base_size = 9.2) +
+  theme_minimal(base_size = 10.2) +
   theme(
-    plot.title = element_text(face = "bold", size = 10.8, margin = margin(b = 1)),
-    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 7),
-    axis.text.y = element_text(size = 7),
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(face = "bold", size = 12.2, color = "#1f2a44", margin = margin(b = 3)),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 8, color = "#344054"),
+    axis.text.y = element_text(size = 8, color = "#344054"),
     legend.position = "right",
-    legend.title = element_text(size = 7),
-    legend.text = element_text(size = 6.4),
-    plot.margin = margin(1, 4, 1, 4)
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 7.2),
+    panel.grid = element_blank(),
+    plot.margin = margin(2, 5, 2, 5)
   )
-
-# ============================================================
-# PCA
-# ============================================================
 
 cap_numeric <- function(x, lower_prob = 0.01, upper_prob = 0.99) {
   if (all(is.na(x))) return(rep(0, length(x)))
@@ -412,19 +397,19 @@ p_pca <- ggplot() +
     data = pca_plot_df %>% filter(JobSat_3 == "Positive"),
     aes(x = PC1, y = PC2, color = JobSat_3),
     alpha = 0.18,
-    size = 0.56
+    size = 0.58
   ) +
   geom_point(
     data = pca_plot_df %>% filter(JobSat_3 == "Neutral"),
     aes(x = PC1, y = PC2, color = JobSat_3),
     alpha = 0.34,
-    size = 0.64
+    size = 0.68
   ) +
   geom_point(
     data = pca_plot_df %>% filter(JobSat_3 == "Negative"),
     aes(x = PC1, y = PC2, color = JobSat_3),
     alpha = 0.11,
-    size = 0.46
+    size = 0.48
   ) +
   scale_color_manual(
     values = c(
@@ -437,7 +422,7 @@ p_pca <- ggplot() +
   ) +
   guides(
     color = guide_legend(
-      override.aes = list(alpha = c(0.55, 0.80, 0.45), size = c(2.4, 2.6, 2.3)),
+      override.aes = list(alpha = c(0.55, 0.80, 0.45), size = c(2.5, 2.7, 2.4)),
       nrow = 1
     )
   ) +
@@ -447,29 +432,82 @@ p_pca <- ggplot() +
     y = paste0("PC2 (", var_exp[2], "%)"),
     color = NULL
   ) +
-  theme_classic(base_size = 9.2) +
+  theme_classic(base_size = 10.2) +
   theme(
-    plot.title = element_text(size = 10.8, face = "bold", margin = margin(b = 1)),
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(size = 12.2, face = "bold", color = "#1f2a44", margin = margin(b = 3)),
     legend.position = "top",
-    legend.text = element_text(size = 6.8),
-    legend.key.size = unit(0.2, "cm"),
-    axis.title = element_text(size = 8),
-    axis.text = element_text(size = 7),
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4),
-    plot.margin = margin(1, 4, 1, 4)
+    legend.text = element_text(size = 7.5, color = "#344054"),
+    legend.key.size = unit(0.22, "cm"),
+    axis.title = element_text(size = 9, color = "#344054"),
+    axis.text = element_text(size = 8, color = "#344054"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.45),
+    plot.margin = margin(2, 5, 2, 5)
   )
 
 left_panel <- p_remote / p_corr + plot_layout(heights = c(0.95, 1.05))
 right_panel <- p_pca
 
-(left_panel | right_panel) +
-  plot_layout(widths = c(0.85, 1.35)) +
-  plot_annotation(
-    subtitle = "Some features show patterns, but the classes are still hard to separate.",
-    caption = "Meaning: Negative and Neutral cases overlap with Positive cases. This makes prediction difficult, so Macro F1 is better than accuracy.",
-    theme = theme(
-      plot.subtitle = element_text(size = 11.5, color = "grey25", margin = margin(b = 8)),
-      plot.caption = element_text(size = 9.6, face = "bold", hjust = 0, margin = margin(t = 7))
-    )
-  )
+eda_slide_2_plot <- (left_panel | right_panel) +
+  plot_layout(widths = c(0.85, 1.35))
+
+ggsave(
+  filename = "figures/eda_slide_2.png",
+  plot = eda_slide_2_plot,
+  width = 13.6,
+  height = 5.25,
+  dpi = 260
+)
+```
+
+## {.nostretch}
+
+```{=html}
+<div style="width:100%;height:720px;box-sizing:border-box;padding:22px 42px 24px 42px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;">
+  <div style="border-bottom:1px solid #d7dee8;padding-bottom:7px;margin-bottom:8px;">
+    <h1 style="font-size:28px;line-height:1.12;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
+  </div>
+
+  <div style="margin-bottom:6px;">
+    <div style="font-size:18px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px;">Target structure and key patterns</div>
+    <div style="font-size:19px;line-height:1.22;font-weight:560;color:#344054;">We compared both target designs and checked whether basic predictors could separate satisfaction groups.</div>
+  </div>
+
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;margin-top:0;margin-bottom:8px;min-height:0;">
+    <img src="figures/eda_slide_1.png" style="width:100%;max-height:528px;object-fit:contain;display:block;" />
+  </div>
+
+  <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:14px;padding:12px 18px;box-sizing:border-box;">
+    <div style="font-size:18px;line-height:1.32;color:#344054;font-weight:520;">
+      <span style="font-weight:760;color:#315f9f;">What this means:</span>
+      Most responses are positive, and salary or experience alone cannot separate the groups. Accuracy alone may hide poor minority-class prediction.
+    </div>
+  </div>
+</div>
+```
+
+## {.nostretch}
+
+```{=html}
+<div style="width:100%;height:720px;box-sizing:border-box;padding:22px 42px 24px 42px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;">
+  <div style="border-bottom:1px solid #d7dee8;padding-bottom:7px;margin-bottom:8px;">
+    <h1 style="font-size:28px;line-height:1.12;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
+  </div>
+
+  <div style="margin-bottom:6px;">
+    <div style="font-size:18px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:3px;">Feature relationships and class separability</div>
+    <div style="font-size:19px;line-height:1.22;font-weight:560;color:#344054;">We checked feature relationships and used PCA to see whether the classes are visually separable.</div>
+  </div>
+
+  <div style="flex:1;display:flex;align-items:center;justify-content:center;margin-top:0;margin-bottom:8px;min-height:0;">
+    <img src="figures/eda_slide_2.png" style="width:100%;max-height:528px;object-fit:contain;display:block;" />
+  </div>
+
+  <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:14px;padding:12px 18px;box-sizing:border-box;">
+    <div style="font-size:18px;line-height:1.32;color:#344054;font-weight:520;">
+      <span style="font-weight:760;color:#315f9f;">What this means:</span>
+      Negative and Neutral cases overlap with Positive cases. This explains why prediction is difficult and why Macro F1 is more useful than accuracy.
+    </div>
+  </div>
+</div>
 ```
