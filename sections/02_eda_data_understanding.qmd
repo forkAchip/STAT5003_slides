@@ -1,0 +1,475 @@
+## EDA 1: Target Structure and Key Patterns {.smaller}
+
+```{r eda-slide-1, echo=FALSE, message=FALSE, warning=FALSE, fig.width=13.8, fig.height=5.0, out.width="100%"}
+library(tidyverse)
+library(patchwork)
+library(scales)
+
+df <- read_csv("survey_results_public.csv", show_col_types = FALSE)
+
+convert_years <- function(x) {
+  x <- as.character(x)
+  x[x == "Less than 1 year"] <- "0.5"
+  x[x == "More than 50 years"] <- "51"
+  as.numeric(x)
+}
+
+eda_df <- df %>%
+  mutate(
+    JobSat = as.numeric(JobSat),
+    JobSat_5 = case_when(
+      JobSat <= 1  ~ "Very Dissatisfied",
+      JobSat <= 3  ~ "Dissatisfied",
+      JobSat <= 6  ~ "Neutral",
+      JobSat <= 8  ~ "Satisfied",
+      JobSat <= 10 ~ "Very Satisfied",
+      TRUE ~ NA_character_
+    ),
+    JobSat_3 = case_when(
+      JobSat <= 3  ~ "Negative",
+      JobSat <= 6  ~ "Neutral",
+      JobSat <= 10 ~ "Positive",
+      TRUE ~ NA_character_
+    ),
+    JobSat_5 = factor(
+      JobSat_5,
+      levels = c("Very Dissatisfied", "Dissatisfied", "Neutral", "Satisfied", "Very Satisfied")
+    ),
+    JobSat_3 = factor(
+      JobSat_3,
+      levels = c("Negative", "Neutral", "Positive")
+    ),
+    WorkExp = as.numeric(WorkExp),
+    YearsCode = convert_years(YearsCode),
+    ConvertedCompYearly = as.numeric(ConvertedCompYearly),
+    LogSalary = log1p(ConvertedCompYearly)
+  ) %>%
+  filter(!is.na(JobSat_3), !is.na(JobSat_5))
+
+# ============================================================
+# Target distributions
+# ============================================================
+
+target_5 <- eda_df %>%
+  count(JobSat_5) %>%
+  mutate(
+    prop = n / sum(n),
+    Class = as.character(JobSat_5)
+  )
+
+target_3 <- eda_df %>%
+  count(JobSat_3) %>%
+  mutate(
+    prop = n / sum(n),
+    Class = as.character(JobSat_3)
+  )
+
+target_colours <- c(
+  "Very Dissatisfied" = "#D95F5F",
+  "Dissatisfied" = "#F28E8E",
+  "Neutral" = "#E9B45B",
+  "Satisfied" = "#9EC9F3",
+  "Very Satisfied" = "#5F9ED1",
+  "Negative" = "#EB6A6A",
+  "Positive" = "#8FBCEB"
+)
+
+p_target_5 <- ggplot(target_5, aes(x = prop, y = fct_rev(JobSat_5), fill = Class)) +
+  geom_col(width = 0.62, show.legend = FALSE) +
+  geom_text(
+    aes(label = paste0(n, "  (", percent(prop, accuracy = 0.1), ")")),
+    hjust = -0.05,
+    size = 2.8,
+    fontface = "bold"
+  ) +
+  scale_x_continuous(labels = percent, limits = c(0, 0.58)) +
+  scale_fill_manual(values = target_colours) +
+  labs(
+    title = "Five-class target",
+    x = "Share of valid JobSat responses",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(
+    plot.title = element_text(face = "bold", size = 11.5, margin = margin(b = 1)),
+    axis.title = element_text(size = 8.5),
+    axis.text.x = element_text(size = 7.5),
+    axis.text.y = element_text(size = 7.8),
+    plot.margin = margin(1, 3, 1, 3)
+  )
+
+p_target_3 <- ggplot(target_3, aes(x = prop, y = fct_rev(JobSat_3), fill = Class)) +
+  geom_col(width = 0.62, show.legend = FALSE) +
+  geom_text(
+    aes(label = paste0(n, "  (", percent(prop, accuracy = 0.1), ")")),
+    hjust = -0.05,
+    size = 2.8,
+    fontface = "bold"
+  ) +
+  scale_x_continuous(labels = percent, limits = c(0, 0.82)) +
+  scale_fill_manual(values = target_colours) +
+  labs(
+    title = "Three-class target",
+    x = "Share of valid JobSat responses",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(
+    plot.title = element_text(face = "bold", size = 11.5, margin = margin(b = 1)),
+    axis.title = element_text(size = 8.5),
+    axis.text.x = element_text(size = 7.5),
+    axis.text.y = element_text(size = 8),
+    plot.margin = margin(1, 3, 1, 3)
+  )
+
+p_target <- (p_target_5 | p_target_3) +
+  plot_annotation(
+    title = "Target distribution comparison",
+    theme = theme(
+      plot.title = element_text(face = "bold", size = 12.5, margin = margin(b = 2))
+    )
+  )
+
+# ============================================================
+# Missingness
+# ============================================================
+
+missing_vars <- c(
+  "JobSat", "ConvertedCompYearly", "WorkExp", "YearsCode",
+  "OrgSize", "RemoteWork", "AISelect", "AISent", "AIThreat", "DevType"
+)
+
+missing_df <- df %>%
+  select(any_of(missing_vars)) %>%
+  summarise(across(everything(), ~ mean(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "MissingRate") %>%
+  arrange(desc(MissingRate)) %>%
+  slice_head(n = 7)
+
+p_missing <- ggplot(missing_df, aes(x = MissingRate, y = reorder(Variable, MissingRate))) +
+  geom_col(fill = "#E15759", width = 0.62) +
+  geom_text(
+    aes(label = percent(MissingRate, accuracy = 0.1)),
+    hjust = -0.05,
+    size = 2.8,
+    fontface = "bold"
+  ) +
+  scale_x_continuous(labels = percent, limits = c(0, 0.58)) +
+  labs(
+    title = "Missingness in important fields",
+    x = "Missing rate",
+    y = NULL
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12.5, margin = margin(b = 1)),
+    axis.title = element_text(size = 8.5),
+    axis.text.x = element_text(size = 7.5),
+    axis.text.y = element_text(size = 8),
+    plot.margin = margin(1, 4, 1, 4)
+  )
+
+# ============================================================
+# Salary and work experience by target class
+# ============================================================
+
+plot_data <- eda_df %>%
+  filter(!is.na(WorkExp), !is.na(LogSalary), is.finite(LogSalary)) %>%
+  mutate(
+    WorkExp = pmin(WorkExp, quantile(WorkExp, 0.99, na.rm = TRUE)),
+    LogSalary = pmin(LogSalary, quantile(LogSalary, 0.99, na.rm = TRUE))
+  )
+
+p_salary <- ggplot(plot_data, aes(x = JobSat_3, y = LogSalary, fill = JobSat_3)) +
+  geom_boxplot(outlier.alpha = 0.05, width = 0.56, show.legend = FALSE) +
+  scale_fill_manual(values = c("Negative" = "#F4A3A3", "Neutral" = "#F2D28B", "Positive" = "#BFDDF5")) +
+  labs(
+    title = "Salary overlaps across groups",
+    x = NULL,
+    y = "Log yearly compensation"
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12, margin = margin(b = 1)),
+    axis.title = element_text(size = 8.5),
+    axis.text = element_text(size = 8),
+    plot.margin = margin(1, 4, 1, 4)
+  )
+
+p_work <- ggplot(plot_data, aes(x = JobSat_3, y = WorkExp, fill = JobSat_3)) +
+  geom_boxplot(outlier.alpha = 0.05, width = 0.56, show.legend = FALSE) +
+  scale_fill_manual(values = c("Negative" = "#F4A3A3", "Neutral" = "#F2D28B", "Positive" = "#BFDDF5")) +
+  labs(
+    title = "Experience overlaps across groups",
+    x = NULL,
+    y = "Years of work experience"
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(
+    plot.title = element_text(face = "bold", size = 12, margin = margin(b = 1)),
+    axis.title = element_text(size = 8.5),
+    axis.text = element_text(size = 8),
+    plot.margin = margin(1, 4, 1, 4)
+  )
+
+top_panel <- p_target | p_missing
+bottom_panel <- p_salary | p_work
+
+(top_panel / bottom_panel) +
+  plot_layout(heights = c(1.02, 1)) +
+  plot_annotation(
+    subtitle = "We checked both five-class and three-class targets. Three-class is simpler and clearer.",
+    caption = "Meaning: the target is imbalanced. Salary and experience overlap across groups, so accuracy alone is not enough.",
+    theme = theme(
+      plot.subtitle = element_text(size = 11.5, color = "grey25", margin = margin(b = 8)),
+      plot.caption = element_text(size = 9.6, face = "bold", hjust = 0, margin = margin(t = 7))
+    )
+  )
+```
+
+## EDA 2: Feature Relationships and Class Separability {.smaller}
+
+```{r eda-slide-2, echo=FALSE, message=FALSE, warning=FALSE, fig.width=13.8, fig.height=5.0, out.width="100%"}
+library(tidyverse)
+library(patchwork)
+library(scales)
+
+# ============================================================
+# Remote work pattern
+# ============================================================
+
+remote_df <- eda_df %>%
+  mutate(
+    RemoteGroup = case_when(
+      str_detect(RemoteWork, regex("remote", ignore_case = TRUE)) &
+        str_detect(RemoteWork, regex("in-person", ignore_case = TRUE)) ~ "Hybrid",
+      str_detect(RemoteWork, regex("remote", ignore_case = TRUE)) ~ "Remote",
+      str_detect(RemoteWork, regex("person", ignore_case = TRUE)) ~ "In-person",
+      is.na(RemoteWork) ~ "Missing",
+      TRUE ~ "Other"
+    ),
+    RemoteGroup = factor(RemoteGroup, levels = c("In-person", "Hybrid", "Remote", "Other", "Missing"))
+  ) %>%
+  count(JobSat_3, RemoteGroup) %>%
+  group_by(JobSat_3) %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup()
+
+p_remote <- ggplot(remote_df, aes(x = JobSat_3, y = prop, fill = RemoteGroup)) +
+  geom_col(position = "fill", width = 0.62) +
+  scale_y_continuous(labels = percent) +
+  scale_fill_manual(values = c(
+    "In-person" = "#00A878",
+    "Hybrid" = "#9A9E00",
+    "Remote" = "#1BA3D8",
+    "Other" = "#D65FDD",
+    "Missing" = "#BDBDBD"
+  )) +
+  labs(
+    title = "Remote work patterns overlap",
+    x = NULL,
+    y = "Within-class proportion",
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 9.2) +
+  theme(
+    plot.title = element_text(face = "bold", size = 10.8, margin = margin(b = 1)),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    legend.position = "bottom",
+    legend.text = element_text(size = 6.4),
+    legend.key.size = unit(0.2, "cm"),
+    plot.margin = margin(1, 4, 1, 4)
+  ) +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE))
+
+# ============================================================
+# Correlation heatmap
+# ============================================================
+
+corr_df <- eda_df %>%
+  transmute(
+    WorkExp,
+    YearsCode,
+    ToolWork = as.numeric(ToolCountWork),
+    ToolPersonal = as.numeric(ToolCountPersonal),
+    LogSalary
+  )
+
+corr_mat <- cor(corr_df, use = "pairwise.complete.obs")
+corr_long <- as.data.frame(as.table(corr_mat))
+names(corr_long) <- c("Var1", "Var2", "Correlation")
+
+p_corr <- ggplot(corr_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Correlation, 2)), size = 2.5) +
+  scale_fill_gradient2(
+    low = "#4575B4",
+    mid = "white",
+    high = "#D73027",
+    midpoint = 0,
+    limits = c(-1, 1)
+  ) +
+  labs(
+    title = "Numeric features are related",
+    x = NULL,
+    y = NULL,
+    fill = "Corr."
+  ) +
+  theme_minimal(base_size = 9.2) +
+  theme(
+    plot.title = element_text(face = "bold", size = 10.8, margin = margin(b = 1)),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 7),
+    axis.text.y = element_text(size = 7),
+    legend.position = "right",
+    legend.title = element_text(size = 7),
+    legend.text = element_text(size = 6.4),
+    plot.margin = margin(1, 4, 1, 4)
+  )
+
+# ============================================================
+# PCA
+# ============================================================
+
+cap_numeric <- function(x, lower_prob = 0.01, upper_prob = 0.99) {
+  if (all(is.na(x))) return(rep(0, length(x)))
+  lower <- quantile(x, lower_prob, na.rm = TRUE)
+  upper <- quantile(x, upper_prob, na.rm = TRUE)
+  x <- ifelse(!is.na(x) & x < lower, lower, x)
+  x <- ifelse(!is.na(x) & x > upper, upper, x)
+  med <- median(x, na.rm = TRUE)
+  if (is.na(med)) med <- 0
+  x[is.na(x)] <- med
+  x
+}
+
+clean_factor <- function(x, top_n = 5) {
+  x <- as.character(x)
+  x[is.na(x) | x == ""] <- "Missing"
+  top_levels <- names(sort(table(x), decreasing = TRUE))[1:min(top_n, length(unique(x)))]
+  x[!(x %in% top_levels)] <- "Other"
+  factor(x)
+}
+
+pca_df <- eda_df %>%
+  transmute(
+    JobSat_3,
+    WorkExp,
+    YearsCode,
+    ToolCountWork,
+    ToolCountPersonal,
+    LogSalary,
+    Age,
+    EdLevel,
+    RemoteWork,
+    OrgSize,
+    ICorPM,
+    AISent,
+    AIAcc,
+    AIThreat,
+    NewRole,
+    PurchaseInfluence
+  )
+
+numeric_vars <- c("WorkExp", "YearsCode", "ToolCountWork", "ToolCountPersonal", "LogSalary")
+categorical_vars <- setdiff(names(pca_df), c("JobSat_3", numeric_vars))
+
+for (v in numeric_vars) {
+  pca_df[[v]] <- cap_numeric(pca_df[[v]], 0.01, 0.99)
+}
+
+for (v in categorical_vars) {
+  pca_df[[v]] <- clean_factor(pca_df[[v]], top_n = 5)
+}
+
+x_mat <- model.matrix(~ . - JobSat_3 - 1, data = pca_df)
+keep_cols <- apply(x_mat, 2, sd) > 0
+x_mat <- x_mat[, keep_cols, drop = FALSE]
+x_mat <- scale(x_mat)
+
+pca_fit <- prcomp(x_mat, center = FALSE, scale. = FALSE)
+var_exp <- round(100 * summary(pca_fit)$importance[2, 1:2], 1)
+
+pca_plot_df <- tibble(
+  PC1 = pca_fit$x[, 1],
+  PC2 = pca_fit$x[, 2],
+  JobSat_3 = factor(pca_df$JobSat_3, levels = c("Positive", "Neutral", "Negative"))
+)
+
+if (median(pca_plot_df$PC1[pca_plot_df$JobSat_3 == "Positive"], na.rm = TRUE) <
+    median(pca_plot_df$PC1[pca_plot_df$JobSat_3 == "Negative"], na.rm = TRUE)) {
+  pca_plot_df$PC1 <- -pca_plot_df$PC1
+}
+
+class_counts <- pca_plot_df %>%
+  count(JobSat_3) %>%
+  mutate(label = paste0(JobSat_3, " (n=", n, ")"))
+
+legend_labels <- setNames(class_counts$label, class_counts$JobSat_3)
+
+p_pca <- ggplot() +
+  geom_point(
+    data = pca_plot_df %>% filter(JobSat_3 == "Positive"),
+    aes(x = PC1, y = PC2, color = JobSat_3),
+    alpha = 0.18,
+    size = 0.56
+  ) +
+  geom_point(
+    data = pca_plot_df %>% filter(JobSat_3 == "Neutral"),
+    aes(x = PC1, y = PC2, color = JobSat_3),
+    alpha = 0.34,
+    size = 0.64
+  ) +
+  geom_point(
+    data = pca_plot_df %>% filter(JobSat_3 == "Negative"),
+    aes(x = PC1, y = PC2, color = JobSat_3),
+    alpha = 0.11,
+    size = 0.46
+  ) +
+  scale_color_manual(
+    values = c(
+      "Positive" = "#8FBCEB",
+      "Neutral" = "#E9B45B",
+      "Negative" = "#EB6A6A"
+    ),
+    breaks = c("Positive", "Neutral", "Negative"),
+    labels = legend_labels
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(alpha = c(0.55, 0.80, 0.45), size = c(2.4, 2.6, 2.3)),
+      nrow = 1
+    )
+  ) +
+  labs(
+    title = "PCA shows strong class overlap",
+    x = paste0("PC1 (", var_exp[1], "%)"),
+    y = paste0("PC2 (", var_exp[2], "%)"),
+    color = NULL
+  ) +
+  theme_classic(base_size = 9.2) +
+  theme(
+    plot.title = element_text(size = 10.8, face = "bold", margin = margin(b = 1)),
+    legend.position = "top",
+    legend.text = element_text(size = 6.8),
+    legend.key.size = unit(0.2, "cm"),
+    axis.title = element_text(size = 8),
+    axis.text = element_text(size = 7),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.4),
+    plot.margin = margin(1, 4, 1, 4)
+  )
+
+left_panel <- p_remote / p_corr + plot_layout(heights = c(0.95, 1.05))
+right_panel <- p_pca
+
+(left_panel | right_panel) +
+  plot_layout(widths = c(0.85, 1.35)) +
+  plot_annotation(
+    subtitle = "Some features show patterns, but the classes are still hard to separate.",
+    caption = "Meaning: Negative and Neutral cases overlap with Positive cases. This makes prediction difficult, so Macro F1 is better than accuracy.",
+    theme = theme(
+      plot.subtitle = element_text(size = 11.5, color = "grey25", margin = margin(b = 8)),
+      plot.caption = element_text(size = 9.6, face = "bold", hjust = 0, margin = margin(t = 7))
+    )
+  )
+```
