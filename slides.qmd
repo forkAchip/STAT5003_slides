@@ -1,0 +1,9 @@
+---
+title: "STAT5003 Group Presentation"
+format:
+  revealjs:
+    controls: true
+    navigation-mode: linear
+---
+
+{{< include sections/05_model_improvement.qmd >}}
