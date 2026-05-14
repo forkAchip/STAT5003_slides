@@ -1,0 +1,16 @@
+---
+title: "STAT5003 Group Presentation"
+format:
+  revealjs:
+    controls: true
+    navigation-mode: linear
+---
+
+{{< include sections/01_problem_framing.qmd >}}
+{{< include sections/02_eda_data_understanding.qmd >}}
+{{< include sections/03_data_preprocessing.qmd >}}
+{{< include sections/04_model_fitting.qmd >}}
+{{< include sections/05_model_improvement.qmd >}}
+{{< include sections/06_model_evaluation.qmd >}}
+{{< include sections/07_model_selection.qmd >}}
+{{< include sections/08_final_results_conclusion.qmd >}}
