@@ -222,11 +222,11 @@
 
   </div>
 
-  <div style="margin-top:auto;background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:12px 18px;">
-    <div style="font-size:18px;line-height:1.26;color:#1f2a44;font-weight:720;text-align:center;">
-      Key point: after trying to handle class imbalance, the main limit is that the three classes are close in the data and do not have enough strong separating features.
-    </div>
+<div style="margin-top:auto;background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:12px 18px;">
+  <div style="font-size:18px;line-height:1.26;color:#1f2a44;font-weight:720;text-align:justify;text-align-last:left;">
+    Key point: we addressed class imbalance, but the remaining challenge is class separability. The three satisfaction groups are close and their feature patterns overlap, so the available features do not provide enough signal to clearly separate them.
   </div>
+</div>
 
 </div>
 ```
