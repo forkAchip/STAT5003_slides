@@ -1,0 +1,730 @@
+```{r eda-generate-figures, echo=FALSE, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(patchwork)
+library(scales)
+library(grid)
+
+dir.create("figures", showWarnings = FALSE)
+
+df <- read_csv("survey_results_public.csv", show_col_types = FALSE)
+
+# ------------------------------------------------------------
+# Helper functions
+# ------------------------------------------------------------
+
+convert_years <- function(x) {
+  x <- as.character(x)
+  x[x == "Less than 1 year"] <- "0.5"
+  x[x == "More than 50 years"] <- "51"
+  as.numeric(x)
+}
+
+count_multiresponse <- function(x) {
+  x <- as.character(x)
+  ifelse(is.na(x) | x == "", NA_real_, str_count(x, ";") + 1)
+}
+
+cap_numeric <- function(x, lower_prob = 0.01, upper_prob = 0.99) {
+  x <- as.numeric(x)
+  if (all(is.na(x))) return(rep(0, length(x)))
+
+  lower <- quantile(x, lower_prob, na.rm = TRUE)
+  upper <- quantile(x, upper_prob, na.rm = TRUE)
+
+  x <- ifelse(!is.na(x) & x < lower, lower, x)
+  x <- ifelse(!is.na(x) & x > upper, upper, x)
+
+  med <- median(x, na.rm = TRUE)
+  if (is.na(med)) med <- 0
+
+  x[is.na(x)] <- med
+  x
+}
+
+clean_factor <- function(x, top_n = 5) {
+  x <- as.character(x)
+  x[is.na(x) | x == ""] <- "Missing"
+
+  top_levels <- names(sort(table(x), decreasing = TRUE))[1:min(top_n, length(unique(x)))]
+  x[!(x %in% top_levels)] <- "Other"
+
+  factor(x)
+}
+
+# ------------------------------------------------------------
+# Make the code safer if some optional columns are missing
+# ------------------------------------------------------------
+
+needed_cols <- c(
+  "JobSat",
+  "ConvertedCompYearly",
+  "WorkExp",
+  "YearsCode",
+  "OrgSize",
+  "RemoteWork",
+  "AISelect",
+  "AISent",
+  "AIThreat",
+  "AIAcc",
+  "DevType",
+  "Age",
+  "EdLevel",
+  "ICorPM",
+  "NewRole",
+  "PurchaseInfluence"
+)
+
+for (col in needed_cols) {
+  if (!(col %in% names(df))) {
+    df[[col]] <- NA
+  }
+}
+
+if (!("ToolCountWork" %in% names(df))) {
+  work_tool_cols <- intersect(
+    c(
+      "LanguageHaveWorkedWith",
+      "DatabaseHaveWorkedWith",
+      "PlatformHaveWorkedWith",
+      "WebframeHaveWorkedWith",
+      "MiscTechHaveWorkedWith",
+      "ToolsTechHaveWorkedWith",
+      "NEWCollabToolsHaveWorkedWith"
+    ),
+    names(df)
+  )
+
+  if (length(work_tool_cols) > 0) {
+    df$ToolCountWork <- rowSums(
+      as.data.frame(lapply(work_tool_cols, function(v) {
+        replace_na(count_multiresponse(df[[v]]), 0)
+      })),
+      na.rm = TRUE
+    )
+  } else {
+    df$ToolCountWork <- NA_real_
+  }
+}
+
+if (!("ToolCountPersonal" %in% names(df))) {
+  personal_tool_cols <- intersect(
+    c(
+      "LanguageWantToWorkWith",
+      "DatabaseWantToWorkWith",
+      "PlatformWantToWorkWith",
+      "WebframeWantToWorkWith",
+      "MiscTechWantToWorkWith",
+      "ToolsTechWantToWorkWith",
+      "NEWCollabToolsWantToWorkWith"
+    ),
+    names(df)
+  )
+
+  if (length(personal_tool_cols) > 0) {
+    df$ToolCountPersonal <- rowSums(
+      as.data.frame(lapply(personal_tool_cols, function(v) {
+        replace_na(count_multiresponse(df[[v]]), 0)
+      })),
+      na.rm = TRUE
+    )
+  } else {
+    df$ToolCountPersonal <- NA_real_
+  }
+}
+
+# ------------------------------------------------------------
+# Main EDA data
+# ------------------------------------------------------------
+
+eda_df <- df %>%
+  mutate(
+    JobSat = as.numeric(JobSat),
+
+    JobSat_5 = case_when(
+      JobSat <= 1  ~ "Very Dissatisfied",
+      JobSat <= 3  ~ "Dissatisfied",
+      JobSat <= 6  ~ "Neutral",
+      JobSat <= 8  ~ "Satisfied",
+      JobSat <= 10 ~ "Very Satisfied",
+      TRUE ~ NA_character_
+    ),
+
+    JobSat_3 = case_when(
+      JobSat <= 3  ~ "Negative",
+      JobSat <= 6  ~ "Neutral",
+      JobSat <= 10 ~ "Positive",
+      TRUE ~ NA_character_
+    ),
+
+    JobSat_5 = factor(
+      JobSat_5,
+      levels = c(
+        "Very Dissatisfied",
+        "Dissatisfied",
+        "Neutral",
+        "Satisfied",
+        "Very Satisfied"
+      )
+    ),
+
+    JobSat_3 = factor(
+      JobSat_3,
+      levels = c("Negative", "Neutral", "Positive")
+    ),
+
+    WorkExp = as.numeric(WorkExp),
+    YearsCode = convert_years(YearsCode),
+    ConvertedCompYearly = as.numeric(ConvertedCompYearly),
+    ToolCountWork = as.numeric(ToolCountWork),
+    ToolCountPersonal = as.numeric(ToolCountPersonal),
+    LogSalary = log1p(ConvertedCompYearly)
+  ) %>%
+  filter(!is.na(JobSat_3), !is.na(JobSat_5))
+
+target_colours <- c(
+  "Very Dissatisfied" = "#D95F5F",
+  "Dissatisfied" = "#F28E8E",
+  "Neutral" = "#E9B45B",
+  "Satisfied" = "#9EC9F3",
+  "Very Satisfied" = "#5F9ED1",
+  "Negative" = "#EB6A6A",
+  "Positive" = "#8FBCEB"
+)
+
+base_theme <- theme_minimal(base_size = 10.5) +
+  theme(
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(
+      face = "bold",
+      size = 12.5,
+      color = "#1f2a44",
+      margin = margin(b = 3)
+    ),
+    axis.title = element_text(size = 9.2, color = "#344054"),
+    axis.text.x = element_text(size = 8.4, color = "#344054"),
+    axis.text.y = element_text(size = 8.4, color = "#344054"),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(2, 6, 2, 4)
+  )
+
+# ============================================================
+# Slide 1 figures
+# ============================================================
+
+target_5 <- eda_df %>%
+  count(JobSat_5) %>%
+  mutate(
+    prop = n / sum(n),
+    Class = as.character(JobSat_5)
+  )
+
+target_3 <- eda_df %>%
+  count(JobSat_3) %>%
+  mutate(
+    prop = n / sum(n),
+    Class = as.character(JobSat_3)
+  )
+
+p_target_5 <- ggplot(target_5, aes(x = prop, y = fct_rev(JobSat_5), fill = Class)) +
+  geom_col(width = 0.62, show.legend = FALSE) +
+  geom_text(
+    aes(label = paste0(n, " (", percent(prop, accuracy = 0.1), ")")),
+    hjust = -0.03,
+    size = 3.0,
+    fontface = "bold",
+    color = "#1f2937"
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    limits = c(0, 0.68),
+    expand = expansion(mult = c(0, 0.02))
+  ) +
+  scale_fill_manual(values = target_colours) +
+  labs(
+    title = "Five-class target",
+    x = "Share of valid JobSat responses",
+    y = NULL
+  ) +
+  base_theme +
+  theme(
+    plot.margin = margin(1, 8, 1, 4)
+  )
+
+p_target_3 <- ggplot(target_3, aes(x = prop, y = fct_rev(JobSat_3), fill = Class)) +
+  geom_col(width = 0.62, show.legend = FALSE) +
+  geom_text(
+    aes(label = paste0(n, " (", percent(prop, accuracy = 0.1), ")")),
+    hjust = -0.03,
+    size = 3.0,
+    fontface = "bold",
+    color = "#1f2937"
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    limits = c(0, 0.95),
+    expand = expansion(mult = c(0, 0.02))
+  ) +
+  scale_fill_manual(values = target_colours) +
+  labs(
+    title = "Three-class target",
+    x = "Share of valid JobSat responses",
+    y = NULL
+  ) +
+  base_theme +
+  theme(
+    plot.margin = margin(1, 8, 1, 4)
+  )
+
+missing_vars <- c(
+  "JobSat",
+  "ConvertedCompYearly",
+  "WorkExp",
+  "YearsCode",
+  "OrgSize",
+  "RemoteWork",
+  "AISelect",
+  "AISent",
+  "AIThreat",
+  "DevType"
+)
+
+missing_df <- df %>%
+  select(any_of(missing_vars)) %>%
+  summarise(across(everything(), ~ mean(is.na(.)))) %>%
+  pivot_longer(everything(), names_to = "Variable", values_to = "MissingRate") %>%
+  arrange(desc(MissingRate)) %>%
+  slice_head(n = 7)
+
+p_missing <- ggplot(missing_df, aes(x = MissingRate, y = reorder(Variable, MissingRate))) +
+  geom_col(fill = "#E15759", width = 0.62) +
+  geom_text(
+    aes(label = percent(MissingRate, accuracy = 0.1)),
+    hjust = -0.03,
+    size = 3.0,
+    fontface = "bold",
+    color = "#1f2937"
+  ) +
+  scale_x_continuous(
+    labels = percent,
+    limits = c(0, 0.66),
+    expand = expansion(mult = c(0, 0.02))
+  ) +
+  labs(
+    title = "Missingness in important fields",
+    x = "Missing rate",
+    y = NULL
+  ) +
+  base_theme +
+  theme(
+    axis.text.y = element_text(size = 8.8, color = "#344054"),
+    plot.margin = margin(1, 6, 1, 4)
+  )
+
+plot_data <- eda_df %>%
+  filter(!is.na(WorkExp), !is.na(LogSalary), is.finite(LogSalary)) %>%
+  mutate(
+    WorkExp = pmin(WorkExp, quantile(WorkExp, 0.99, na.rm = TRUE)),
+    LogSalary = pmin(LogSalary, quantile(LogSalary, 0.99, na.rm = TRUE))
+  )
+
+p_salary <- ggplot(plot_data, aes(x = JobSat_3, y = LogSalary, fill = JobSat_3)) +
+  geom_boxplot(outlier.alpha = 0.05, width = 0.56, show.legend = FALSE) +
+  scale_fill_manual(
+    values = c(
+      "Negative" = "#F4A3A3",
+      "Neutral" = "#F2D28B",
+      "Positive" = "#BFDDF5"
+    )
+  ) +
+  labs(
+    title = "Salary overlaps across groups",
+    x = NULL,
+    y = "Log yearly compensation"
+  ) +
+  base_theme +
+  theme(
+    axis.text = element_text(size = 8.8, color = "#344054"),
+    plot.margin = margin(1, 8, 1, 4)
+  )
+
+p_work <- ggplot(plot_data, aes(x = JobSat_3, y = WorkExp, fill = JobSat_3)) +
+  geom_boxplot(outlier.alpha = 0.05, width = 0.56, show.legend = FALSE) +
+  scale_fill_manual(
+    values = c(
+      "Negative" = "#F4A3A3",
+      "Neutral" = "#F2D28B",
+      "Positive" = "#BFDDF5"
+    )
+  ) +
+  labs(
+    title = "Experience overlaps across groups",
+    x = NULL,
+    y = "Years of work experience"
+  ) +
+  base_theme +
+  theme(
+    axis.text = element_text(size = 8.8, color = "#344054"),
+    plot.margin = margin(1, 8, 1, 4)
+  )
+
+top_row <- p_target_5 | p_target_3 | p_missing
+bottom_row <- p_salary | p_work
+
+eda_slide_1_plot <- (top_row / bottom_row) +
+  plot_layout(
+    heights = c(1.00, 0.95)
+  ) &
+  theme(
+    plot.margin = margin(1, 2, 1, 2)
+  )
+
+ggsave(
+  filename = "figures/eda_slide_1.png",
+  plot = eda_slide_1_plot,
+  width = 13.6,
+  height = 5.35,
+  dpi = 260,
+  bg = "white"
+)
+
+# ============================================================
+# Slide 2 figures
+# ============================================================
+
+remote_df <- eda_df %>%
+  mutate(
+    RemoteGroup = case_when(
+      str_detect(RemoteWork, regex("remote", ignore_case = TRUE)) &
+        str_detect(RemoteWork, regex("in-person", ignore_case = TRUE)) ~ "Hybrid",
+      str_detect(RemoteWork, regex("remote", ignore_case = TRUE)) ~ "Remote",
+      str_detect(RemoteWork, regex("person", ignore_case = TRUE)) ~ "In-person",
+      is.na(RemoteWork) ~ "Missing",
+      TRUE ~ "Other"
+    ),
+    RemoteGroup = factor(
+      RemoteGroup,
+      levels = c("In-person", "Hybrid", "Remote", "Other", "Missing")
+    )
+  ) %>%
+  count(JobSat_3, RemoteGroup) %>%
+  group_by(JobSat_3) %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup()
+
+p_remote <- ggplot(remote_df, aes(x = JobSat_3, y = prop, fill = RemoteGroup)) +
+  geom_col(position = "fill", width = 0.62) +
+  scale_y_continuous(labels = percent) +
+  scale_fill_manual(
+    values = c(
+      "In-person" = "#00A878",
+      "Hybrid" = "#9A9E00",
+      "Remote" = "#1BA3D8",
+      "Other" = "#D65FDD",
+      "Missing" = "#BDBDBD"
+    )
+  ) +
+  labs(
+    title = "Remote work patterns overlap",
+    x = NULL,
+    y = "Within-class proportion",
+    fill = NULL
+  ) +
+  theme_minimal(base_size = 10.2) +
+  theme(
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(
+      face = "bold",
+      size = 12.2,
+      color = "#1f2a44",
+      margin = margin(b = 4)
+    ),
+    axis.title = element_text(size = 9, color = "#344054"),
+    axis.text = element_text(size = 8.8, color = "#344054"),
+    legend.position = "bottom",
+    legend.text = element_text(size = 7.2, color = "#344054"),
+    legend.key.size = unit(0.22, "cm"),
+    panel.grid.minor = element_blank(),
+    plot.margin = margin(1, 6, 1, 4)
+  ) +
+  guides(fill = guide_legend(nrow = 1, byrow = TRUE))
+
+corr_df <- eda_df %>%
+  transmute(
+    WorkExp,
+    YearsCode,
+    ToolWork = as.numeric(ToolCountWork),
+    ToolPersonal = as.numeric(ToolCountPersonal),
+    LogSalary
+  )
+
+corr_mat <- cor(corr_df, use = "pairwise.complete.obs")
+
+corr_long <- as.data.frame(as.table(corr_mat))
+names(corr_long) <- c("Var1", "Var2", "Correlation")
+
+p_corr <- ggplot(corr_long, aes(x = Var1, y = Var2, fill = Correlation)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(Correlation, 2)), size = 3.0, color = "#1f2937") +
+  scale_fill_gradient2(
+    low = "#4575B4",
+    mid = "white",
+    high = "#D73027",
+    midpoint = 0,
+    limits = c(-1, 1),
+    na.value = "#f2f4f7"
+  ) +
+  labs(
+    title = "Numeric features are related",
+    x = NULL,
+    y = NULL,
+    fill = "Corr."
+  ) +
+  theme_minimal(base_size = 10.2) +
+  theme(
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(
+      face = "bold",
+      size = 12.2,
+      color = "#1f2a44",
+      margin = margin(b = 4)
+    ),
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 7.8, color = "#344054"),
+    axis.text.y = element_text(size = 7.8, color = "#344054"),
+    legend.position = "right",
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 7.2),
+    panel.grid = element_blank(),
+    plot.margin = margin(1, 6, 1, 4)
+  )
+
+pca_df <- eda_df %>%
+  transmute(
+    JobSat_3,
+    WorkExp,
+    YearsCode,
+    ToolCountWork,
+    ToolCountPersonal,
+    LogSalary,
+    Age,
+    EdLevel,
+    RemoteWork,
+    OrgSize,
+    ICorPM,
+    AISent,
+    AIAcc,
+    AIThreat,
+    NewRole,
+    PurchaseInfluence
+  )
+
+numeric_vars <- c("WorkExp", "YearsCode", "ToolCountWork", "ToolCountPersonal", "LogSalary")
+categorical_vars <- setdiff(names(pca_df), c("JobSat_3", numeric_vars))
+
+for (v in numeric_vars) {
+  pca_df[[v]] <- cap_numeric(pca_df[[v]], 0.01, 0.99)
+}
+
+for (v in categorical_vars) {
+  pca_df[[v]] <- clean_factor(pca_df[[v]], top_n = 5)
+}
+
+x_mat <- model.matrix(~ . - JobSat_3 - 1, data = pca_df)
+
+keep_cols <- apply(x_mat, 2, sd) > 0
+x_mat <- x_mat[, keep_cols, drop = FALSE]
+x_mat <- scale(x_mat)
+
+pca_fit <- prcomp(x_mat, center = FALSE, scale. = FALSE)
+var_exp <- round(100 * summary(pca_fit)$importance[2, 1:2], 1)
+
+pca_plot_df <- tibble(
+  PC1 = pca_fit$x[, 1],
+  PC2 = pca_fit$x[, 2],
+  JobSat_3 = factor(pca_df$JobSat_3, levels = c("Positive", "Neutral", "Negative"))
+)
+
+if (
+  median(pca_plot_df$PC1[pca_plot_df$JobSat_3 == "Positive"], na.rm = TRUE) <
+  median(pca_plot_df$PC1[pca_plot_df$JobSat_3 == "Negative"], na.rm = TRUE)
+) {
+  pca_plot_df$PC1 <- -pca_plot_df$PC1
+}
+
+class_counts <- pca_plot_df %>%
+  count(JobSat_3) %>%
+  mutate(label = paste0(JobSat_3, " (n=", n, ")"))
+
+legend_labels <- setNames(class_counts$label, class_counts$JobSat_3)
+
+p_pca <- ggplot() +
+  geom_point(
+    data = pca_plot_df %>% filter(JobSat_3 == "Positive"),
+    aes(x = PC1, y = PC2, color = JobSat_3),
+    alpha = 0.18,
+    size = 0.58
+  ) +
+  geom_point(
+    data = pca_plot_df %>% filter(JobSat_3 == "Neutral"),
+    aes(x = PC1, y = PC2, color = JobSat_3),
+    alpha = 0.34,
+    size = 0.68
+  ) +
+  geom_point(
+    data = pca_plot_df %>% filter(JobSat_3 == "Negative"),
+    aes(x = PC1, y = PC2, color = JobSat_3),
+    alpha = 0.11,
+    size = 0.48
+  ) +
+  scale_color_manual(
+    values = c(
+      "Positive" = "#8FBCEB",
+      "Neutral" = "#E9B45B",
+      "Negative" = "#EB6A6A"
+    ),
+    breaks = c("Positive", "Neutral", "Negative"),
+    labels = legend_labels
+  ) +
+  guides(
+    color = guide_legend(
+      override.aes = list(alpha = c(0.55, 0.80, 0.45), size = c(2.5, 2.7, 2.4)),
+      nrow = 1
+    )
+  ) +
+  labs(
+    title = "PCA shows strong class overlap",
+    x = paste0("PC1 (", var_exp[1], "%)"),
+    y = paste0("PC2 (", var_exp[2], "%)"),
+    color = NULL
+  ) +
+  theme_classic(base_size = 10.2) +
+  theme(
+    text = element_text(family = "Arial", color = "#1f2937"),
+    plot.title = element_text(
+      size = 12.2,
+      face = "bold",
+      color = "#1f2a44",
+      margin = margin(b = 4)
+    ),
+    legend.position = "top",
+    legend.text = element_text(size = 7.5, color = "#344054"),
+    legend.key.size = unit(0.22, "cm"),
+    axis.title = element_text(size = 9, color = "#344054"),
+    axis.text = element_text(size = 8, color = "#344054"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.45),
+    plot.margin = margin(1, 6, 1, 4)
+  )
+
+left_panel <- p_remote / p_corr + plot_layout(heights = c(0.95, 1.05))
+right_panel <- p_pca
+
+eda_slide_2_plot <- (left_panel | right_panel) +
+  plot_layout(widths = c(0.82, 1.38)) &
+  theme(
+    plot.margin = margin(1, 2, 1, 2)
+  )
+
+ggsave(
+  filename = "figures/eda_slide_2.png",
+  plot = eda_slide_2_plot,
+  width = 13.6,
+  height = 5.35,
+  dpi = 260,
+  bg = "white"
+)
+```
+
+## {.nostretch}
+
+```{=html}
+<div style="width:100%;height:720px;box-sizing:border-box;padding:14px 44px 14px 44px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;overflow:hidden;">
+
+  <div style="border-bottom:1px solid #d7dee8;padding-bottom:5px;margin-bottom:6px;">
+    <h1 style="font-size:27px;line-height:1.05;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
+  </div>
+
+  <div style="margin-bottom:6px;">
+    <div style="font-size:17.5px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Target structure and key patterns</div>
+    <div style="font-size:15.4px;line-height:1.22;font-weight:520;color:#344054;">
+      We show job satisfaction in both five classes and three classes. The five-class version keeps more detail, while the three-class version is used for modelling because it is easier to understand and more stable.
+    </div>
+  </div>
+
+  <div style="height:360px;display:flex;align-items:center;justify-content:center;margin:0 0 8px 0;overflow:hidden;">
+    <img src="figures/eda_slide_1.png" style="width:100%;height:100%;object-fit:contain;object-position:center center;display:block;" />
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;height:184px;">
+
+    <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#315f9f;margin-bottom:5px;">Why show five classes?</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        The five-class target shows the original satisfaction structure in more detail. It separates very dissatisfied, dissatisfied, neutral, satisfied, and very satisfied developers, so we can see how the original score is distributed.
+      </div>
+    </div>
+
+    <div style="background:#fffaf0;border:1px solid #f1d9a5;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#9a6515;margin-bottom:5px;">Why use three classes?</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        The five classes are too detailed for modelling. Some groups are small and close to each other, so we combine them into Negative, Neutral, and Positive. This makes the prediction task clearer.
+      </div>
+    </div>
+
+    <div style="background:#f9fafb;border:1px solid #d9dee8;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#475467;margin-bottom:5px;">What does this mean?</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        Most developers are in the Positive group. Negative and Neutral are much smaller, so the model may find these two groups harder to predict. This is why we should not only look at accuracy.
+      </div>
+    </div>
+
+  </div>
+
+</div>
+```
+
+## {.nostretch}
+
+```{=html}
+<div style="width:100%;height:720px;box-sizing:border-box;padding:14px 44px 14px 44px;background:#ffffff;color:#1f2937;font-family:Arial, Helvetica, sans-serif;display:flex;flex-direction:column;text-align:left;overflow:hidden;">
+
+  <div style="border-bottom:1px solid #d7dee8;padding-bottom:5px;margin-bottom:6px;">
+    <h1 style="font-size:27px;line-height:1.05;font-weight:720;color:#1f2a44;letter-spacing:-0.1px;margin:0;padding:0;white-space:nowrap;">EDA &amp; Data Understanding</h1>
+  </div>
+
+  <div style="margin-bottom:6px;">
+    <div style="font-size:17.5px;font-weight:760;color:#315f9f;text-transform:uppercase;letter-spacing:0.3px;margin-bottom:2px;">Feature relationships and class separability</div>
+    <div style="font-size:15.4px;line-height:1.22;font-weight:520;color:#344054;">
+      This slide checks whether the selected features can clearly separate Negative, Neutral, and Positive developers. The result shows some useful patterns, but the groups are still mixed together.
+    </div>
+  </div>
+
+  <div style="height:360px;display:flex;align-items:center;justify-content:center;margin:0 0 8px 0;overflow:hidden;">
+    <img src="figures/eda_slide_2.png" style="width:100%;height:100%;object-fit:contain;object-position:center center;display:block;" />
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;height:184px;">
+
+    <div style="background:#f8fbff;border:1px solid #d6e4fb;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#315f9f;margin-bottom:5px;">Remote work</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        Remote work has some relationship with job satisfaction, but the difference is not very strong. It can help the model, but it cannot explain satisfaction by itself.
+      </div>
+    </div>
+
+    <div style="background:#fffaf0;border:1px solid #f1d9a5;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#9a6515;margin-bottom:5px;">Numeric features</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        Some numeric features are related to each other, such as coding experience and work experience. This means the model may receive similar information from different columns.
+      </div>
+    </div>
+
+    <div style="background:#f9fafb;border:1px solid #d9dee8;border-radius:12px;padding:10px 12px;box-sizing:border-box;overflow:hidden;">
+      <div style="font-size:14.2px;font-weight:760;color:#475467;margin-bottom:5px;">Class overlap</div>
+      <div style="font-size:13.1px;line-height:1.23;color:#344054;font-weight:500;">
+        The PCA plot shows that Negative, Neutral, and Positive cases are mixed together. This means the model cannot easily separate the three groups, especially the smaller groups.
+      </div>
+    </div>
+
+  </div>
+
+</div>
+```
