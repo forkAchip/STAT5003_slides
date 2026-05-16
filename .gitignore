@@ -2,3 +2,4 @@
 *.html
 *_files/
 .Rproj.user
+survey_results_public.csv
