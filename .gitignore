@@ -1,3 +1,5 @@
 # Quarto rendered outputs
 *.html
 *_files/
+survey_results_public.csv
+*.png
